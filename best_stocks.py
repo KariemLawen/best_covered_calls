@@ -2,6 +2,12 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 from datetime import datetime
+import pytz  # Library to handle timezones
+
+def is_market_open():
+    """Checks if the market is open based on NYSE hours."""
+    ny_time = datetime.now(pytz.timezone('America/New_York'))
+    return ny_time.weekday() < 5 and 9 <= ny_time.hour < 16
 
 @st.cache_data
 def get_sp500_symbols():
@@ -27,28 +33,52 @@ def get_market_caps(symbols):
 
 def get_covered_calls(stock_symbols, min_premium_ratio=0.03, max_expiration_days=8):
     results = []
+
     for symbol in stock_symbols:
         stock = yf.Ticker(symbol)
+
+        # Get last known closing price and ensure it's valid
         try:
-            current_price = stock.history(period="1d")['Close'][0]
+            history = stock.history(period="1d")
+            current_price = history['Close'][0] if not history.empty else None
+            if current_price is None or current_price <= 0:
+                st.write(f"Invalid current price for {symbol}, skipping.")
+                continue
         except (IndexError, KeyError, ValueError) as e:
             st.write(f"Skipping {symbol}: {e}")
             continue
 
-        # Fetch only valid dates and filter by days until expiration
-        valid_dates = [
-            date for date in stock.options
-            if (datetime.strptime(date, '%Y-%m-%d') - datetime.now()).days <= max_expiration_days
-        ]
+        # Fetch valid options dates within max expiration days
+        try:
+            options_dates = stock.options
+            valid_dates = [
+                date for date in options_dates
+                if (datetime.strptime(date, '%Y-%m-%d') - datetime.now()).days <= max_expiration_days
+            ]
+        except Exception as e:
+            st.write(f"Error retrieving options dates for {symbol}: {e}")
+            continue
 
         for date in valid_dates:
             try:
                 options = stock.option_chain(date).calls
-                options['premium_ratio'] = options['bid'] / current_price
-                filtered_options = options[
-                    (options['premium_ratio'] >= min_premium_ratio) & (options['strike'] > current_price)
+
+                # Validate that bid and strike prices are reasonable compared to current price
+                options = options[
+                    (options['bid'] > 0) &
+                    (options['strike'] >= current_price * 0.8) &  # Ensure strike isn't unrealistically low
+                    (options['strike'] <= current_price * 1.2)  # Ensure strike isn't unrealistically high
                 ]
-                for _, row in filtered_options.iterrows():
+
+                # Calculate premium ratio and filter out extreme ratios
+                options['premium_ratio'] = options['bid'] / current_price
+                options = options[
+                    (options['premium_ratio'] >= min_premium_ratio) &
+                    (options['premium_ratio'] <= 1)  # Cap the premium ratio at 100%
+                ]
+
+                # Add filtered options to results
+                for _, row in options.iterrows():
                     results.append({
                         'Symbol': symbol,
                         'Expiration Date': date,
@@ -57,6 +87,7 @@ def get_covered_calls(stock_symbols, min_premium_ratio=0.03, max_expiration_days
                         'Premium Ratio (%)': round(row['premium_ratio'] * 100, 2),
                         'Current Price': round(current_price, 2)
                     })
+
             except Exception as e:
                 st.write(f"Error processing options for {symbol} on {date}: {e}")
 
