@@ -66,7 +66,7 @@ def get_covered_calls(stock_symbols, min_premium_ratio=0.03, max_expiration_days
                 # Validate that bid and strike prices are reasonable compared to current price
                 options = options[
                     (options['bid'] > 0) &
-                    (options['strike'] >= current_price * 0.8) &  # Ensure strike isn't unrealistically low
+                    (options['strike'] >= current_price) &  # Ensure strike isn't unrealistically low
                     (options['strike'] <= current_price * 1.2)  # Ensure strike isn't unrealistically high
                 ]
 
