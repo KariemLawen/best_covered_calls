@@ -31,7 +31,7 @@ def get_market_caps(symbols):
     companies_df = pd.DataFrame(companies).sort_values(by='Market Cap', ascending=False)
     return companies_df['Symbol'].tolist()[:500]
 
-def get_covered_calls(stock_symbols, min_premium_ratio=0.03, max_expiration_days=8):
+def get_covered_calls(stock_symbols, min_premium_ratio=0.03, max_expiration_days=7):
     results = []
 
     for symbol in stock_symbols:
@@ -100,7 +100,7 @@ def get_covered_calls(stock_symbols, min_premium_ratio=0.03, max_expiration_days
 st.title("Top S&P 500 Companies with Covered Calls")
 
 min_premium_ratio = st.number_input("Minimum Premium Ratio (%)", min_value=0.0, value=3.0) / 100
-max_expiration_days = st.number_input("Max Expiration Days", min_value=1, max_value=30, value=8)
+max_expiration_days = st.number_input("Max Expiration Days", min_value=1, max_value=90, value=7)
 
 # Fetch data and calculate covered calls
 if st.button("Get Covered Calls"):
